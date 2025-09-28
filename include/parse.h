@@ -3,6 +3,11 @@
 
 #include <stdio.h>
 #include <unistd.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdbool.h>
+#include <time.h>
+
 #include "common.h"
 
 struct DB_Header_t {

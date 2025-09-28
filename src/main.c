@@ -1,26 +1,67 @@
 #include <stdio.h>
-
+#include <stdbool.h>
+#include <getopt.h>
+#include "common.h"
 #include "file.h"
 #include "parse.h"
 
-int main(int argc, char *argv[]) {
-    int fd, numSensors = 0;
+/* Private function prototypes -----------------------------------------------*/
+void print_usage(char *argv[]);
 
-    if (2 != argc) {
-        printf("Usage: %s <input_file>\n", argv[0]);
+/**
+  * @brief  The application entry point.
+  * @param argc: [in] Number of command-line arguments
+  * @param argv: [in] Array of pointers to the command-line argument strings
+  * @retval int
+  */
+int main(int argc, char *argv[]) {
+    int c;
+    bool newFile = false;
+    char *pFilepath = NULL;
+    char *pAddString = NULL;
+
+    while (-1 != (c = getopt(argc, argv, "nf:a:"))) {
+        switch (c)
+        {
+            case 'n':{
+                newFile = true;
+                break;
+            }
+            case 'f':{
+                pFilepath = optarg;
+                break;
+            }
+            case 'a':{
+                pAddString = optarg;
+                break;
+            }
+            case '?':{
+                printf("Unknown option -%c\n", c);
+                break;
+            }
+            default:{
+                return -1;
+            }
+        }
+    }
+
+    if (NULL == pFilepath) {
+        printf("File path is a required argument!\r\n");
+        print_usage(argv);
+
         return 0;
     }
 
-    fd = open_file_rw(argv[1]);
-    if (-1 == fd) {
-        return -1;
-    }
-
-    if (0 != parse_file_header(fd, &numSensors)) {
-        return -1;
-    }
-
-    printf("Number of sensors stored: %d\r\n", numSensors);
+    printf("New file: %d\r\n", newFile);
+    printf("Filepath: %s\r\n", pFilepath);
 
     return 0;
+}
+
+void print_usage(char *argv[]) {
+    printf("\nUsage: %s -f -n <database file>\r\n", argv[0]);
+    printf("\t -n - create new database file\r\n");
+    printf("\t -f - (required) path to database file\r\n");
+
+    return;
 }
