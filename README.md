@@ -33,13 +33,14 @@ After compiling the project, you can run TelemetryReadingsDB with different comm
 
 2. To run the application with custom commands, use the following format:
    ```
-   ./bin/TelemetryReadingsDB [options]
+   ./bin/sensor_view [options]
    ```
    Replace `[options]` with your desired command-line arguments. The options are:
    - `-n`: Create a new database file.
    - `-f <database file>`: Path to the database file. (required)
    - `-a`: Add a sensor to the database.
    - `-r`: Remove a sensor from the database.
+   - `-l`: List all sensors in the database.
 
 ## Cleaning the Build
 
