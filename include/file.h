@@ -4,8 +4,11 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include "common.h"
 
-// Open file as read-write
-int open_file_rw(char *filename);
+// create new database
+int file_createDb(char *pFilename);
+// open existing database
+int file_openDb(char *pFilename);
 
 #endif /* _FILE_H */

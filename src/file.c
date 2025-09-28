@@ -1,17 +1,51 @@
 #include "file.h"
 
 /**
- * @brief  Opens a file for reading and writing.
- * @param  filename: [in] Pointer to a null-terminated string containing the file name.
+ * @brief  Creates a new database file with the given filename.
+ * @param  pFilename: [in] Filename of the new database file
  * @return 0 on success, -1 otherwise.
- * @note   This function is a wrapper around the standard C function `open`.
+ * @note  This function tries to open a file as read only mode. If the file
+ *          already exists, it returns an error.  Otherwise, creates a new 
+ *          database file
  */
-int open_file_rw(char *filename) {
-    int fd = open(filename, O_RDWR);
+int file_createDb(char *pFilename)
+{
+    int fd = -1;
 
-    if (-1 == fd) {
+    fd = open(pFilename, O_RDONLY);
+    if (-1 != fd)
+    {
+        close(fd);
+        printf("File already exists\r\n");
+        return STATUS_ERROR;
+    }
+
+    fd = open(pFilename, O_RDWR | O_CREAT, 0644);
+    if (-1 == fd)
+    {
         perror("open");
-        return fd;
+        return STATUS_ERROR;
+    }
+
+    return fd;
+}
+
+/**
+ * @brief  Opens an existing database file.
+ * @param  pFilename: [in] Filename of the database file
+ * @return 0 on success, -1 otherwise.
+ * @note  This function tries to open a file as read/write mode. If the file
+ *          does not exist, it returns an error.
+ */
+int file_openDb(char *pFilename)
+{
+    int fd = -1;
+
+    fd = open(pFilename, O_RDWR, 0644);
+    if (-1 == fd)
+    {
+        perror("open");
+        return STATUS_ERROR;
     }
 
     return fd;
