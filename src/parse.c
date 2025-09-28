@@ -141,6 +141,74 @@ int parse_addSensor(Parse_DbHeader_t *pDbhdr, Parse_Sensor_t *pSensors, char *pA
     return STATUS_SUCCESS;
 }
 
+/**
+ * @brief Parse a new sensor from the file
+ * @param pDbhdr: Pointer to the database header
+ * @param pSensors: Pointer to the array of sensors
+ * @param pRemove: Pointer to the string containing the sensor ID to be removed
+ * @return 0 if success, -1 otherwise
+ */
+int parse_removeSensor(Parse_DbHeader_t *pDbhdr, Parse_Sensor_t *pSensors, char *pRemove)
+{
+    int sensorIndex = -1;
+    int i = 0;
+
+    for (i = 0; i < pDbhdr->count; i++)
+    {
+        if (0 == strcmp(pRemove, pSensors[i].sensorId))
+        {
+            printf("index of sensor %d", i);
+            sensorIndex = i;
+            break;
+        }
+    }
+
+    if (-1 != sensorIndex)
+    {
+        for (i = sensorIndex; i < pDbhdr->count - 1; i++)
+        {
+            pSensors[i] = pSensors[i + 1];
+        }
+
+        return STATUS_SUCCESS;
+    }
+
+    return STATUS_ERROR;
+}
+
+void parse_listSensors(Parse_DbHeader_t *pDbhdr, Parse_Sensor_t *pSensors)
+{
+    int i = 0;
+
+    for (i = 0; i < pDbhdr->count; i++)
+    {
+        printf("Sensor %d\n", i);
+        printf("\tID: %s\n", pSensors[i].sensorId);
+        printf("\tType: %s\n", pSensors[i].sensorType);
+        printf("\tI2C Address: 0x%02X\n", pSensors[i].i2cAddr);
+        printf("\tTimestamp: %s", ctime(&pSensors[i].timestamp));
+        printf("\tReading: %.2f\n", pSensors[i].readingValue);
+        printf("\tFlags: 0x%02X", pSensors[i].flags);
+
+        if (pSensors[i].flags & SENSOR_FLAG_ACTIVE)
+        {
+            printf(" ACTIVE");
+        }
+        if (pSensors[i].flags & SENSOR_FLAG_ERROR)
+        {
+            printf(" ERROR");
+        }
+        if (pSensors[i].flags & SENSOR_FLAG_CALIBRATED)
+        {
+            printf(" CALIBRATED");
+        }
+
+        printf("\n");
+        printf("\tLocation: %s\n", pSensors[i].location);
+        printf("\tThresholds: Min=%.2f, Max=%.2f\n", 
+                pSensors[i].minThreshold, pSensors[i].maxThreshold);
+    }
+}
 
 /**
  * @brief  Reads sensor data in the database

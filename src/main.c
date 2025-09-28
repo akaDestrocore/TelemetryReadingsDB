@@ -6,7 +6,7 @@
 #include "parse.h"
 
 /* Private function prototypes -----------------------------------------------*/
-void print_usage(char *argv[]);
+void printUsage(char *argv[]);
 
 /**
   * @brief  The application entry point.
@@ -22,8 +22,10 @@ int main(int argc, char *argv[]) {
     int dbfd = -1;
     Parse_DbHeader_t *pDbhdr = NULL;
     Parse_Sensor_t *pSensors = NULL;
+    char *pRemove = NULL;
+    bool list = false;
 
-    while (-1 != (c = getopt(argc, argv, "nf:a:"))) {
+    while (-1 != (c = getopt(argc, argv, "nf:a:lr:"))) {
         switch (c)
         {
             case 'n':{
@@ -38,6 +40,14 @@ int main(int argc, char *argv[]) {
                 pAddString = optarg;
                 break;
             }
+            case 'l':{
+                list = true;
+                break;
+            }
+            case 'r':{
+                pRemove = optarg;
+                break;
+            }
             case '?':{
                 printf("Unknown option -%c\r\n", c);
                 break;
@@ -50,7 +60,7 @@ int main(int argc, char *argv[]) {
 
     if (NULL == pFilepath) {
         printf("File path is a required argument!\r\n");
-        print_usage(argv);
+        printUsage(argv);
 
         return 0;
     }
@@ -97,12 +107,29 @@ int main(int argc, char *argv[]) {
         parse_addSensor(pDbhdr, pSensors, pAddString);
     }
 
+    if (true == list)
+    {
+        parse_listSensors(pDbhdr, pSensors);
+    }
+
+    if (NULL != pRemove)
+    {
+        if (STATUS_ERROR == parse_removeSensor(pDbhdr, pSensors, pRemove))
+        {
+            printf("Could not remove sensor");
+            return -1;
+        }
+
+        pDbhdr->count--;
+        pSensors = realloc(pSensors, pDbhdr->count * (sizeof(Parse_Sensor_t)));
+    }
+
     parse_outputFile(dbfd, pDbhdr, pSensors);
 
     return 0;
 }
 
-void print_usage(char *argv[]) {
+void printUsage(char *argv[]) {
     printf("\r\nUsage: %s -f -n <database file>\r\n", argv[0]);
     printf("\t -n - create new database file\r\n");
     printf("\t -f - (required) path to database file\r\n");
