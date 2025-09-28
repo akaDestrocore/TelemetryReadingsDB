@@ -90,6 +90,59 @@ int parse_validateDbHeader(int fd, Parse_DbHeader_t **ppHeaderOut)
 }
 
 /**
+ * @brief  Parse a sensor string and add it to the database
+ * @param pDbhdr Pointer to the database header
+ * @param pSensors Pointer to the sensors array
+ * @param pAddString String containing the sensor data in the following format:
+ *                  sensor_id,sensor_type,i2c_addr,timestamp,reading_value
+ * @return 0 if success, -1 otherwise
+ */
+int parse_addSensor(Parse_DbHeader_t *pDbhdr, Parse_Sensor_t *pSensors, char *pAddString)
+{
+    char *pSensorId = NULL;
+    char *pSensorType = NULL;
+    char *pI2cAddrStr = NULL;
+    char *pTimestampStr = NULL;
+    char *pReadingStr = NULL;
+
+    printf("%s\n", pAddString);
+
+    // Parse format: sensor_id,sensor_type,i2c_addr,timestamp,reading_value
+    // Example: "BNO055_01,BNO055,0x28,1701432000,25.5"
+
+    pSensorId = strtok(pAddString, ",");
+    pSensorType = strtok(NULL, ",");
+    pI2cAddrStr = strtok(NULL, ",");
+    pTimestampStr = strtok(NULL, ",");
+    pReadingStr = strtok(NULL, ",");
+
+    printf("%s %s %s %s %s\n", pSensorId, pSensorType, pI2cAddrStr, 
+            pTimestampStr, pReadingStr);
+
+    memset(&pSensors[pDbhdr->count - 1], 0, sizeof(Parse_Sensor_t));
+
+    strncpy(pSensors[pDbhdr->count - 1].sensorId, pSensorId, 
+            sizeof(pSensors[pDbhdr->count - 1].sensorId) - 1);
+    strncpy(pSensors[pDbhdr->count - 1].sensorType, pSensorType, 
+            sizeof(pSensors[pDbhdr->count - 1].sensorType) - 1);
+
+    // Parse I2C address if any
+    pSensors[pDbhdr->count - 1].i2cAddr = (unsigned char)strtol(pI2cAddrStr, NULL, 0);
+
+    pSensors[pDbhdr->count - 1].timestamp = (time_t)atol(pTimestampStr);
+
+    pSensors[pDbhdr->count - 1].readingValue = atof(pReadingStr);
+
+    pSensors[pDbhdr->count - 1].flags = SENSOR_FLAG_ACTIVE | SENSOR_FLAG_CALIBRATED;
+    strcpy(pSensors[pDbhdr->count - 1].location, "Unknown Location");
+    pSensors[pDbhdr->count - 1].minThreshold = -100.0;
+    pSensors[pDbhdr->count - 1].maxThreshold = 100.0;
+
+    return STATUS_SUCCESS;
+}
+
+
+/**
  * @brief  Reads sensor data in the database
  * @param fd: [in] File descriptor
  * @param  pDbhdr: [in] Pointer to database header

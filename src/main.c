@@ -89,8 +89,13 @@ int main(int argc, char *argv[]) {
         return 0;
     }
 
-    printf("New file: %d\r\n", newFile);
-    printf("Filepath: %s\r\n", pFilepath);
+    if (NULL != pAddString)
+    {
+        pDbhdr->count++;
+        pSensors = realloc(pSensors, pDbhdr->count * (sizeof(Parse_Sensor_t)));
+
+        parse_addSensor(pDbhdr, pSensors, pAddString);
+    }
 
     parse_outputFile(dbfd, pDbhdr, pSensors);
 

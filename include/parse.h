@@ -45,6 +45,8 @@ typedef struct
 int parse_createDbHeader(int fd, Parse_DbHeader_t **ppHeaderOut);
 // validate if header is valid
 int parse_validateDbHeader(int fd, Parse_DbHeader_t **ppHeaderOut);
+// add new sensor to database
+int parse_addSensor(Parse_DbHeader_t *pDbhdr, Parse_Sensor_t *pSensors, char *pAddString);
 // read sensors in database
 int parse_readSensors(int fd, Parse_DbHeader_t *pDbhdr, Parse_Sensor_t **ppSensorsOut);
 // write database to file
