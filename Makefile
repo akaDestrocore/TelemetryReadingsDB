@@ -12,6 +12,7 @@ OBJ_CLI = $(SRC_CLI:src/cli/%.c=obj/cli/%.o)
 run: clean default
 	./$(TARGET_SRV) -f ./telemetry_db -n -p 8080
 
+default: 
 # Build server
 $(TARGET_SRV): $(OBJ_SRV)
 	gcc $(CFLAGS) -o $@ $(OBJ_SRV)
