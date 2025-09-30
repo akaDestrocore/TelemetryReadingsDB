@@ -10,7 +10,7 @@ SRC_CLI = $(wildcard src/cli/*.c)
 OBJ_CLI = $(SRC_CLI:src/cli/%.c=obj/cli/%.o)
 
 run: clean default
-	./$(TARGET_SRV) -f ./telemetry_db -n -p 8080
+	./$(TARGET_SRV) -f ./telemetry_db.db -n -p 8080
 
 default: 
 # Build server
