@@ -1,41 +1,41 @@
+CFLAGS = -Wall -Iinclude
+
 TARGET_SRV = bin/telemetry_srv
 TARGET_CLI = bin/telemetry_cli
 
-CFLAGS = -std=c90 -Wall
-
 SRC_SRV = $(wildcard src/srv/*.c)
-OBJ_SRV = $(SRC_SRV:src/srv/%.c=obj/srv/%.o)
+OBJ_SRV = $(patsubst src/srv/%.c,obj/srv/%.o,$(SRC_SRV))
 
 SRC_CLI = $(wildcard src/cli/*.c)
-OBJ_CLI = $(SRC_CLI:src/cli/%.c=obj/cli/%.o)
+OBJ_CLI = $(patsubst src/cli/%.c,obj/cli/%.o,$(SRC_CLI))
 
-run: clean default
+.PHONY: default run clean directories
+
+run: default
 	./$(TARGET_SRV) -f ./telemetry_db.db -n -p 8080
 
-default: 
-# Build server
+default: directories $(TARGET_SRV) $(TARGET_CLI)
+
+# Link targets
 $(TARGET_SRV): $(OBJ_SRV)
-	gcc $(CFLAGS) -o $@ $(OBJ_SRV)
+	$(CC) $(CFLAGS) -o $@ $^
 
-$(OBJ_SRV): obj/srv/%.o: src/srv/%.c
-	gcc $(CFLAGS) -c $< -o $@ -Iinclude
-
-# Build client
 $(TARGET_CLI): $(OBJ_CLI)
-	gcc $(CFLAGS) -o $@ $(OBJ_CLI)
+	$(CC) $(CFLAGS) -o $@ $^
 
-$(OBJ_CLI): obj/cli/%.o: src/cli/%.c
-	gcc $(CFLAGS) -c $< -o $@ -Iinclude
+obj/srv/%.o: src/srv/%.c | directories
+	$(CC) $(CFLAGS) -c $< -o $@
 
-# Directory creation
+obj/cli/%.o: src/cli/%.c | directories
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# Ensure directories exist
 directories:
 	mkdir -p bin obj/srv obj/cli
 
-# Cleanup targets
-cleanup:
+# Cleanup
+clean:
 	killall -9 dbserver 2>/dev/null || true
-
-clean: cleanup
 	rm -f obj/srv/*.o obj/cli/*.o
 	rm -f bin/*
 	rm -f *.db
