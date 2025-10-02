@@ -3,11 +3,21 @@
 // define in main.c to initialize clients
 extern ClientState_t clientStates[MAX_CLIENTS];
 
+/* Private function prototypes -----------------------------------------------*/
+// Initialize clients
+static void srvpoll_initClients(ClientState_t* states);
+// Get the first free slot from the clients that the server is working with
+static int srvpoll_findFreeSlot(ClientState_t* states);
+// Find the slot number of the client that has data to be read 
+static int srvpoll_findSlotByFd(ClientState_t* states, int fd);
+// State machine
+static void handle_client_fsm(Parse_DbHeader_t *dbhdr, Parse_Sensor_t **sensors, ClientState_t *client, int dbfd);
+
 /**
   * @brief  Initialize the client state array
   * @param states: pointer to the client state array
   */
-void srvpoll_initClients(ClientState_t* states) {
+static void srvpoll_initClients(ClientState_t* states) {
     int i = 0;
     for(; i < MAX_CLIENTS; ++i) {
         states[i].fd = -1;
@@ -23,7 +33,7 @@ void srvpoll_initClients(ClientState_t* states) {
   * @param states: pointer to the client state array
   * @retval the index of the free slot
   */
-int srvpoll_findFreeSlot(ClientState_t* states) {
+static int srvpoll_findFreeSlot(ClientState_t* states) {
     int i = 0;
     for(; i < MAX_CLIENTS; ++i) {
         if (-1 == states[i].fd) {
@@ -39,7 +49,7 @@ int srvpoll_findFreeSlot(ClientState_t* states) {
   * @param fd: file descriptor
   * @retval slot index
   */
-int srvpoll_findSlotByFd(ClientState_t* states, int fd) {
+static int srvpoll_findSlotByFd(ClientState_t* states, int fd) {
     int i = 0;
     for(; i < MAX_CLIENTS; ++i) {
         if (states[i].fd == fd) {
@@ -74,7 +84,7 @@ void poll_loop(unsigned short port, Parse_DbHeader_t *dbhdr, Parse_Sensor_t **se
         exit(EXIT_FAILURE);
     }
 
-    if (0 != setsockopt(listen_fd, SOL_PACKET, SO_REUSEADDR, &opt, sizeof(opt))) {
+    if (0 != setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt))) {
         perror("setsockopt");
         exit(EXIT_FAILURE);
     }
@@ -168,5 +178,33 @@ void poll_loop(unsigned short port, Parse_DbHeader_t *dbhdr, Parse_Sensor_t **se
                 }
             }
         }
+    }
+}
+
+static void handle_client_fsm(Parse_DbHeader_t *dbhdr, Parse_Sensor_t **sensors, ClientState_t *client, int dbfd) {
+    // Casting buffer that was already read
+    DbProtocolHdr_t *hdr = (DbProtocolHdr_t *)client->buffer;
+
+    // Unpack
+    hdr->type = ntohl(hdr->type);
+    hdr->len = ntohl(hdr->len);
+
+    if (STATE_HELLO == client->state) {
+        // Hello message received, check for the length of the message.
+        if (MSG_HANDSHAKE_REQ != hdr->type || 1 != hdr->len) {
+            printf("Didn't receive MSG_HELLO from client.\r\n");
+        }
+
+        DbProtocolVer_Req_t* hello_protocol = (DbProtocolVer_Req_t*)&hdr[1];
+        hello_protocol->version = ntohs(hello_protocol->version);
+        if (PROTOCOL_VER != hello_protocol->version) {
+            printf("Protocol mismatch.\r\n");
+        }
+
+        client->state = STATE_MSG;
+    }
+
+    if (STATE_MSG == client->state) {
+        // TODO: receive message
     }
 }

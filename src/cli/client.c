@@ -8,6 +8,7 @@
 
 /* Private function prototypes -----------------------------------------------*/
 void handleClient(int fd);
+int send_req(int fd);
 
 
 /**
@@ -26,7 +27,7 @@ int main(int argc, char *argv[]) {
 
     serverInfo.sin_family = AF_INET;
     serverInfo.sin_addr.s_addr = inet_addr(argv[1]);
-    serverInfo.sin_port = htons(5555);
+    serverInfo.sin_port = htons(8080);
 
     int fd = socket(AF_INET, SOCK_STREAM, 0);
 
@@ -41,6 +42,11 @@ int main(int argc, char *argv[]) {
         return -1;
     }
 
+    if (STATUS_SUCCESS != send_req(fd)) {
+        close(fd);
+        return -1;
+    }
+
     return 0;
 }
 
@@ -51,16 +57,16 @@ int main(int argc, char *argv[]) {
 void handleClient(int fd) {
     char buff[4096] = {0};
 
-    read(fd, buff, sizeof(MsgHdr_t) + sizeof(int));
+    read(fd, buff, sizeof(DbProtocolHdr_t) + sizeof(int));
 
-    MsgHdr_t *msgHdr = buff;
+    DbProtocolHdr_t *msgHdr = buff;
     msgHdr->type = ntohl(msgHdr->type);
     msgHdr->len = ntohs(msgHdr->len);
 
     int *data = &msgHdr[1];
     *data = ntohl(*data);
 
-    if(MSG_HELLO_REQ != msgHdr->type) {
+    if(MSG_HANDSHAKE_REQ != msgHdr->type) {
         printf("Protocol mismatch.\r\n");
     }
 
@@ -69,4 +75,22 @@ void handleClient(int fd) {
     }
 
     printf("Server connected successfully.\r\n");
+}
+
+int send_req(int fd) {
+    char buff[BUFF_SIZE] = {0};
+
+    DbProtocolHdr_t *hdr = buff;
+    hdr->type = MSG_HANDSHAKE_REQ;
+    hdr->len = 1;
+
+    // Pack it for the network
+    hdr->type = htonl(hdr->type);
+    hdr->len = htons(hdr->len);
+
+    write(fd, buff, sizeof(DbProtocolHdr_t));
+
+    printf("Server connected successfully.\r\n");
+
+    return 0;
 }

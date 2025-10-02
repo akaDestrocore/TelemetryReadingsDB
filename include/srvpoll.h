@@ -24,12 +24,6 @@ typedef struct {
     char buffer[BUFF_SIZE];
 } ClientState_t;
 
-// Initialize clients
-void srvpoll_initClients(ClientState_t* states);
-// Get the first free slot from the clients that the server is working with
-int srvpoll_findFreeSlot(ClientState_t* states);
-// Find the slot number of the client that has data to be read 
-int srvpoll_findSlotByFd(ClientState_t* states, int fd);
 // Polling routine for the server
 void poll_loop(unsigned short port, Parse_DbHeader_t *dbhdr, Parse_Sensor_t **sensors, int dbfd);
 
