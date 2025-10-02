@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <getopt.h>
 #include <stdint.h>
+#include <string.h>
 #include "common.h"
 
 #define BUFF_SIZE   4096
@@ -13,6 +14,7 @@
 /* Private function prototypes -----------------------------------------------*/
 void handleClient(int fd);
 int send_req(int fd);
+int send_sensor(int fd, const char *addstr);
 
 
 /**
@@ -91,7 +93,7 @@ int main(int argc, char *argv[]) {
     }
 
     if (NULL != addarg) {
-        // send_sensor(fd, addarg);
+        send_sensor(fd, addarg);
     }
 
     close(fd);
@@ -165,4 +167,39 @@ int send_req(int fd) {
     return STATUS_SUCCESS;
 
     return 0;
+}
+
+int send_sensor(int fd, const char *addstr) {
+    char buff[BUFF_SIZE] = {0};
+
+    DbProtocolHdr_t *hdr = buff;
+    hdr->type = MSG_SENSOR_ADD_REQ;
+    hdr->len = 1;
+
+    DbProtocol_SensorAddReq_t *sensor = (DbProtocol_SensorAddReq_t *)&hdr[1];
+    strncpy(sensor->data, addstr, sizeof(sensor->data));
+
+    hdr->type = htonl(hdr->type);
+    hdr->len = htons(hdr->len);
+
+    // Write message
+    write(fd, buff, sizeof(DbProtocolHdr_t) + sizeof(DbProtocol_SensorAddReq_t));
+
+    // Read response 
+    read(fd, buff, sizeof(buff));
+
+    hdr->type = htonl(hdr->type);
+    hdr->len = ntohs(hdr->len);
+
+    if (MSG_ERROR == hdr->type) {
+        printf("Improper format for add sensor\r\n");
+        close(fd);
+        return STATUS_ERROR;
+    }
+
+    if (MSG_SENSOR_ADD_RESP  == hdr->type) {
+        printf("Sensor added succesfully.\r\n");
+    }
+
+    return STATUS_SUCCESS;
 }

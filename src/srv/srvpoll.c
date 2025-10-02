@@ -11,7 +11,13 @@ static int srvpoll_findFreeSlot(ClientState_t* states);
 // Find the slot number of the client that has data to be read 
 static int srvpoll_findSlotByFd(ClientState_t* states, int fd);
 // State machine
-static void handle_client_fsm(Parse_DbHeader_t *dbhdr, Parse_Sensor_t **sensors, ClientState_t *client, int dbfd);
+static void handle_client_fsm(Parse_DbHeader_t *dbhdr, Parse_Sensor_t **ppSensors, ClientState_t *client, int dbfd);
+// reply to client's request
+static void fsm_reply_hello(ClientState_t *client, DbProtocolHdr_t *hdr);
+// reply error to client
+static void fsm_reply_err(ClientState_t *client, DbProtocolHdr_t *hdr);
+// Reply successfull add 
+static void fsm_reply_add(ClientState_t *client, DbProtocolHdr_t *hdr);
 
 /**
   * @brief  Initialize the client state array
@@ -181,7 +187,11 @@ void poll_loop(unsigned short port, Parse_DbHeader_t *dbhdr, Parse_Sensor_t **se
     }
 }
 
-static void handle_client_fsm(Parse_DbHeader_t *dbhdr, Parse_Sensor_t **sensors, ClientState_t *client, int dbfd) {
+/** 
+ * Helper functions
+*/
+
+static void handle_client_fsm(Parse_DbHeader_t *dbhdr, Parse_Sensor_t **ppSensors, ClientState_t *client, int dbfd) {
     // Casting buffer that was already read
     DbProtocolHdr_t *hdr = (DbProtocolHdr_t *)client->buffer;
 
@@ -201,10 +211,44 @@ static void handle_client_fsm(Parse_DbHeader_t *dbhdr, Parse_Sensor_t **sensors,
             printf("Protocol mismatch.\r\n");
         }
 
+        fsm_reply_hello(client, hdr);
         client->state = STATE_MSG;
+        printf("Client promoted to STATE_MSG\r\n");
+        return;
     }
 
     if (STATE_MSG == client->state) {
-        // TODO: receive message
+        if (MSG_SENSOR_ADD_REQ == hdr->type) {
+            DbProtocol_SensorAddReq_t *sensor = (DbProtocolVer_Req_t *)&hdr[1];
+
+            printf("Adding sensor: %s\r\n", sensor->data);
+            if (STATUS_SUCCESS != parse_addSensor(dbhdr, ppSensors, sensor->data)) {
+                fsm_reply_err(client, hdr);
+                return;
+            } else {
+                fsm_reply_add(client, hdr);
+                parse_outputFile(dbfd, dbhdr, *ppSensors);
+            }
+        }
     }
+}
+
+static void fsm_reply_hello(ClientState_t *client, DbProtocolHdr_t *hdr) {
+    hdr->type = htonl(MSG_HANDSHAKE_RESP);
+    hdr->len = htons(1);
+    DbProtocolVer_Resp_t* hello_protocol = (DbProtocolVer_Resp_t*)&hdr[1];
+    hello_protocol->version = htons(PROTOCOL_VER);
+    write(client->fd, hdr, sizeof(DbProtocolHdr_t) + sizeof(DbProtocolVer_Resp_t));
+}
+
+static void fsm_reply_err(ClientState_t *client, DbProtocolHdr_t *hdr) {
+    hdr->type = htonl(MSG_ERROR);
+    hdr->len = htons(0);
+    write(client->fd, hdr, sizeof(DbProtocolHdr_t));
+}
+
+static void fsm_reply_add(ClientState_t *client, DbProtocolHdr_t *hdr) {
+    hdr->type = htonl(MSG_SENSOR_ADD_RESP);
+    hdr->len = htons(0);
+    write(client->fd, hdr, sizeof(DbProtocolHdr_t));
 }

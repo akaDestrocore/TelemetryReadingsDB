@@ -37,4 +37,8 @@ typedef struct {
     uint16_t version;
 } DbProtocolVer_Resp_t;
 
+typedef struct {
+    uint8_t data[1024];
+} DbProtocol_SensorAddReq_t;
+
 #endif /* _COMMON_H */
