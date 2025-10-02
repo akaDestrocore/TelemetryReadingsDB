@@ -107,7 +107,7 @@ void poll_loop(unsigned short port, Parse_DbHeader_t *dbhdr, Parse_Sensor_t **se
         exit(EXIT_FAILURE);
     }
 
-    printf("Listening on port: %d", port);
+    printf("Listening on port: %d\r\n", port);
 
     memset(fds, 0, sizeof(fds));
     fds[0].fd = listen_fd;

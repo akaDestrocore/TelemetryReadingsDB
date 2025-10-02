@@ -4,7 +4,11 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <getopt.h>
+#include <stdint.h>
 #include "common.h"
+
+#define BUFF_SIZE   4096
 
 /* Private function prototypes -----------------------------------------------*/
 void handleClient(int fd);
@@ -22,30 +26,75 @@ int main(int argc, char *argv[]) {
         printf("Usage: %s <host ip>\r\n", argv[0]);
         return 0;
     }
+    
+    int c;
+    char *addarg = NULL;
+    char *portarg = NULL;
+    char *hostarg = NULL;
+    uint16_t port = 0;
+
+    while (-1 != (c = getopt(argc, argv, "a:p:h:"))) {
+        switch(c) {
+            case 'a': {
+                addarg = optarg;
+                break;
+            }
+            case 'p': {
+                portarg = optarg;
+                port = atoi(portarg);
+                break;
+            }
+            case 'h': {
+                hostarg = optarg;
+                break;
+            }
+            case '?': {
+                printf("Unknown option: %c\r\n", c);
+                break;
+            }
+            default: {
+                return -1;
+            }
+        }
+    }
+
+    if (0 == port) {
+        printf("Bad port: %s\r\n", portarg);
+        return -1;
+    }
+
+    if (NULL == hostarg) {
+        printf("You need to specify host!\r\n");
+        return -1;
+    }
 
     struct sockaddr_in serverInfo = {0};
-
     serverInfo.sin_family = AF_INET;
-    serverInfo.sin_addr.s_addr = inet_addr(argv[1]);
-    serverInfo.sin_port = htons(8080);
+    serverInfo.sin_port = htons(port);
+    serverInfo.sin_addr.s_addr = inet_addr(hostarg);
 
     int fd = socket(AF_INET, SOCK_STREAM, 0);
-
     if (-1 == fd) {
         perror("socket");
-        return -1;
+        return 0;
     }
 
     if (-1 == connect(fd, (struct sockaddr *)&serverInfo, sizeof(serverInfo))) {
         perror("connect");
         close(fd);
-        return -1;
+        return 0;
     }
 
     if (STATUS_SUCCESS != send_req(fd)) {
         close(fd);
         return -1;
     }
+
+    if (NULL != addarg) {
+        // send_sensor(fd, addarg);
+    }
+
+    close(fd);
 
     return 0;
 }
@@ -77,6 +126,11 @@ void handleClient(int fd) {
     printf("Server connected successfully.\r\n");
 }
 
+/**
+  * @brief  Request sensor data from the server database.
+  * @param fd: File descriptor of the client.
+  * @retval Status of the request.
+  */
 int send_req(int fd) {
     char buff[BUFF_SIZE] = {0};
 
@@ -84,13 +138,31 @@ int send_req(int fd) {
     hdr->type = MSG_HANDSHAKE_REQ;
     hdr->len = 1;
 
-    // Pack it for the network
+    DbProtocolVer_Req_t *req = (DbProtocolVer_Req_t *)&hdr[1];
+    req->version = PROTOCOL_VER;
+
     hdr->type = htonl(hdr->type);
     hdr->len = htons(hdr->len);
+    req->version = htonl(req->version);
 
-    write(fd, buff, sizeof(DbProtocolHdr_t));
+    // Write data
+    write(fd, buff, sizeof(DbProtocolHdr_t) + sizeof(DbProtocolVer_Req_t));
 
-    printf("Server connected successfully.\r\n");
+    // Read response
+    read(fd, buff, sizeof(buff));
+
+    hdr->type = htonl(hdr->type);
+    hdr->len = htons(hdr->len);
+    
+    // if any errors
+    if ( MSG_ERROR == hdr->type) {
+        printf("Protocol mismatch.\r\n");
+        close(fd);
+        return STATUS_ERROR;
+    }
+
+    printf("Server connected!\r\n");
+    return STATUS_SUCCESS;
 
     return 0;
 }
