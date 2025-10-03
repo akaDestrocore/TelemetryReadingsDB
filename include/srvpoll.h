@@ -4,6 +4,8 @@
 #include <poll.h>
 #include <arpa/inet.h>
 #include <sys/time.h>
+#include <signal.h>
+#include <stdbool.h>
 #include "parse.h"
 
 #define     MAX_CLIENTS     256

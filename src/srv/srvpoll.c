@@ -1,15 +1,18 @@
-#include <srvpoll.h>
+#include "srvpoll.h"
 
 // define in main.c to initialize clients
 extern ClientState_t clientStates[MAX_CLIENTS];
 
+/* Private variables ---------------------------------------------------------*/
+static volatile bool keep_running = true;
+
 /* Private function prototypes -----------------------------------------------*/
 // Initialize clients
-static void srvpoll_initClients(ClientState_t* states);
+static void init_clients(ClientState_t* states);
 // Get the first free slot from the clients that the server is working with
-static int srvpoll_findFreeSlot(ClientState_t* states);
+static int find_free_slot(ClientState_t* states);
 // Find the slot number of the client that has data to be read 
-static int srvpoll_findSlotByFd(ClientState_t* states, int fd);
+static int find_slot_by_fd(ClientState_t* states, int fd);
 // State machine
 static void handle_client_fsm(Parse_DbHeader_t *dbhdr, Parse_Sensor_t **ppSensors, ClientState_t *client, int dbfd);
 // reply to client's request
@@ -18,12 +21,16 @@ static void fsm_reply_hello(ClientState_t *client, DbProtocolHdr_t *hdr);
 static void fsm_reply_err(ClientState_t *client, DbProtocolHdr_t *hdr);
 // Reply successfull add 
 static void fsm_reply_add(ClientState_t *client, DbProtocolHdr_t *hdr);
+// Handle client's request
+static void handle_signal(int sig);
+// listen for incoming connections
+static int setup_server_socket(unsigned short port);
 
 /**
   * @brief  Initialize the client state array
   * @param states: pointer to the client state array
   */
-static void srvpoll_initClients(ClientState_t* states) {
+static void init_clients(ClientState_t* states) {
     int i = 0;
     for(; i < MAX_CLIENTS; ++i) {
         states[i].fd = -1;
@@ -39,7 +46,7 @@ static void srvpoll_initClients(ClientState_t* states) {
   * @param states: pointer to the client state array
   * @retval the index of the free slot
   */
-static int srvpoll_findFreeSlot(ClientState_t* states) {
+static int find_free_slot(ClientState_t* states) {
     int i = 0;
     for(; i < MAX_CLIENTS; ++i) {
         if (-1 == states[i].fd) {
@@ -55,13 +62,14 @@ static int srvpoll_findFreeSlot(ClientState_t* states) {
   * @param fd: file descriptor
   * @retval slot index
   */
-static int srvpoll_findSlotByFd(ClientState_t* states, int fd) {
+static int find_slot_by_fd(ClientState_t *states, int fd) {
     int i = 0;
-    for(; i < MAX_CLIENTS; ++i) {
+    for (; i < MAX_CLIENTS; i++) {
         if (states[i].fd == fd) {
-            return &states[i];
+            return i;
         }
     }
+    
     return -1;
 }
 
@@ -69,122 +77,110 @@ static int srvpoll_findSlotByFd(ClientState_t* states, int fd) {
   * @brief  Polling routine for the server
   * @param port: port number to listen on
   * @param dbhdr: pointer to the database header structure
-  * @param sensors: pointer to the array of sensor structures
+  * @param ppSensors: pointer to the array of sensors
   * @param dbfd: file descriptor for the database file
   */
-void poll_loop(unsigned short port, Parse_DbHeader_t *dbhdr, Parse_Sensor_t **ppSensors, int dbfd) {
-    int listen_fd, conn_fd, freeSlot;
-    struct sockaddr_in server_addr, client_addr;
+void poll_loop(unsigned short port, Parse_DbHeader_t *dbhdr, Parse_Sensor_t **sensors, int dbfd) {
+    int conn_fd, freeSlot;
+    struct sockaddr_in client_addr;
     socklen_t client_len = sizeof(client_addr);
 
-    struct pollfd fds[MAX_CLIENTS+1];
-    int nfds = 1;
-    int opt = 1;
+    int i, listen_fd;
+    int n_events;
+    int nfds;
+    struct pollfd fds[MAX_CLIENTS + 1];
+    
+    signal(SIGINT, handle_signal);
+    signal(SIGTERM, handle_signal);
+    
+    init_clients(clientStates);
+    
+    listen_fd = setup_server_socket(port);
+    printf("  Listening on: 0.0.0.0:%d\r\n", port);
 
-    // Initialize client states
-    srvpoll_initClients(&clientStates);
-
-    // Create listening socket
-    if (-1 == (listen_fd = socket(AF_INET, SOCK_STREAM, 0))) {
-        perror("socket");
-        exit(EXIT_FAILURE);
-    }
-
-    if (0 != setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt))) {
-        perror("setsockopt");
-        exit(EXIT_FAILURE);
-    }
-
-    // Setup server address structure
-    memset(&server_addr, 0, sizeof(server_addr));
-    server_addr.sin_addr.s_addr = INADDR_ANY;
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(port);
-
-    // Bind socket to port
-    if (-1 == bind(listen_fd, (struct sockaddr *)&server_addr, sizeof(server_addr))) {
-        perror("bind");
-        exit(EXIT_FAILURE);
-    }
-
-    // Listen on socket
-    if (-1 == listen(listen_fd, MAX_CLIENTS)) {
-        perror("listen");
-        exit(EXIT_FAILURE);
-    }
-
-    printf("Listening on port: %d\r\n", port);
-
-    memset(fds, 0, sizeof(fds));
-    fds[0].fd = listen_fd;
-    fds[0].events = POLLIN;
-    nfds = 1;
-
-    while (1) {
-        int ii = 1;
-        for (int i = 0; i < MAX_CLIENTS; i++) {
-            if (-1 == clientStates[i].fd) {
-                fds[ii].fd = clientStates[i].fd;
-                fds[ii].events = POLLIN;
-                ii++;
+    
+    while (true == keep_running) {
+        int i, poll_idx = 1;
+        memset(fds, 0, sizeof(struct pollfd) * (MAX_CLIENTS + 1));
+        
+        fds[0].fd = listen_fd;
+        fds[0].events = POLLIN;
+        
+        for (i = 0; i < MAX_CLIENTS; i++) {
+            if (clientStates[i].fd != -1) {
+                fds[poll_idx].fd = clientStates[i].fd;
+                fds[poll_idx].events = POLLIN;
+                poll_idx++;
             }
         }
-
-        // Wait for event
-        int n_events = poll(fds, nfds, -1);
-        if ( -1 == n_events) {
-            perror("poll");
-            exit(EXIT_FAILURE);
-        } 
         
+        nfds = poll_idx;
+        
+        n_events = poll(fds, nfds, 30000);
+        
+        if (n_events < 0) {
+            perror("poll");
+            break;
+        }
+        
+        if (n_events == 0) {
+            printf("Poll timeout - no activity\r\n");
+            continue;
+        }
+
         if (fds[0].revents & POLLIN) {
-            if (-1 == (conn_fd = accept(listen_fd, (struct sockaddr*)&client_addr, &client_len))) {
+            if ((conn_fd = accept(listen_fd, (struct sockaddr *)&client_addr, &client_len)) == -1) {
                 perror("accept");
                 continue;
             }
-
-            printf("New connection established from %s:%d\n", inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
-
-            freeSlot = srvpoll_findFreeSlot(&clientStates);
-            if (-1 == freeSlot) {
-                // No more slots available, close the new connection.
-                printf("Server is full. Closing new connection.\r\n");
+        
+            printf("New connection from %s:%d\r\n", 
+                   inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
+        
+            freeSlot = find_free_slot(clientStates);
+            if (freeSlot == -1) {
+                printf("Server full: closing new connection\r\n");
                 close(conn_fd);
             } else {
                 clientStates[freeSlot].fd = conn_fd;
-                clientStates[freeSlot].state = STATE_CONNECTED;
+                clientStates[freeSlot].state = STATE_HELLO;
+                printf("Client connected in slot %d with fd %d\r\n", freeSlot, conn_fd);
                 nfds++;
-                printf("Slot %d has fd %d\n", freeSlot, clientStates[freeSlot].fd);
             }
-
             n_events--;
         }
-
-        // Check each client for read/write activity
-        for (int i = 0; i <= nfds && n_events > 0; i++) {
+        
+        for (i = 1; i <= nfds && n_events > 0; i++) {
             if (fds[i].revents & POLLIN) {
                 n_events--;
 
                 int fd = fds[i].fd;
-                int slot = srvpoll_findSlotByFd(fds[i].fd, &clientStates);
-                ssize_t bytes_read = read(fd, &clientStates[slot].buffer, sizeof(clientStates));
+                int slot = find_slot_by_fd(clientStates, fd);
+                ssize_t bytes_read = read(fd, &clientStates[slot].buffer, sizeof(clientStates[slot].buffer));
                 if (bytes_read <= 0) {
-                    // Connection error
                     close(fd);
-                    if (-1 == slot) {
-                        printf("File descriptor you're trying to close does not exist.\r\n");
-                    } else {
+
+                    if (-1 != slot) {
                         clientStates[slot].fd = -1;
                         clientStates[slot].state = STATE_DISCONNECTED;
-                        printf("Client disconnected.\r\n");
+                        printf("Client disconnected\n");
                         nfds--;
                     }
                 } else {
-                    printf("Received data from client: %s\r\n", clientStates[slot].buffer);
+                   handle_client_fsm(dbhdr, sensors, &clientStates[slot], dbfd);
                 }
             }
         }
+
+        if (true != keep_running) {
+            printf("Shutting down server...\n");
+            break;
+        }
     }
+    
+    printf("Closing server socket...\n");
+    close(listen_fd);
+    return;
 }
 
 /** 
@@ -254,4 +250,49 @@ static void fsm_reply_add(ClientState_t *client, DbProtocolHdr_t *hdr) {
     hdr->type = htonl(MSG_SENSOR_ADD_RESP);
     hdr->len = htons(0);
     write(client->fd, hdr, sizeof(DbProtocolHdr_t));
+}
+
+static void handle_signal(int sig) {
+    printf("Received signal %d, shutting down...\n", sig);
+    keep_running = false;
+}
+
+static int setup_server_socket(unsigned short port) {
+    int listen_fd;
+    struct sockaddr_in server_addr;
+    int opt = 1;
+
+    // Create new socket for listening
+    if ((listen_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+        perror("socket");
+        exit(EXIT_FAILURE);
+    }
+
+    if (setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
+        perror("setsockopt");
+        close(listen_fd);
+        exit(EXIT_FAILURE);
+    }
+
+    // Prepare server addr
+    memset(&server_addr, 0, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = INADDR_ANY;
+    server_addr.sin_port = htons(port);
+
+    /* Bind socket to port */
+    if (bind(listen_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
+        perror("bind");
+        close(listen_fd);
+        exit(EXIT_FAILURE);
+    }
+
+    // Listen for incoming connections (max 15)
+    if (listen(listen_fd, 15) < 0) {
+        perror("listen");
+        close(listen_fd);
+        exit(EXIT_FAILURE);
+    }
+    
+    return listen_fd;
 }

@@ -1,4 +1,4 @@
-CFLAGS = -Wall -Iinclude
+CFLAGS = -Wall -Iinclude -g -O0
 
 TARGET_SRV = bin/telemetry_srv
 TARGET_CLI = bin/telemetry_cli
