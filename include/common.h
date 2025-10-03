@@ -41,4 +41,16 @@ typedef struct {
     uint8_t data[1024];
 } DbProtocol_SensorAddReq_t;
 
+typedef struct {
+    char sensorId[64];
+    char sensorType[32];
+    unsigned char i2cAddr;
+    uint32_t timestamp;
+    float readingValue;
+    unsigned char flags;
+    char location[128];
+    float minThreshold;
+    float maxThreshold;
+} DbProtocol_SensorListResp_t;
+
 #endif /* _COMMON_H */

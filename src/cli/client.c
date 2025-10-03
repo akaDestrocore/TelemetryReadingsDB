@@ -7,6 +7,7 @@
 #include <getopt.h>
 #include <stdint.h>
 #include <string.h>
+#include <stdbool.h>
 #include "common.h"
 
 #define BUFF_SIZE   4096
@@ -15,6 +16,7 @@
 static void handle_client(int fd);
 static int send_req(int fd);
 static int send_sensor(int fd, const char *addstr);
+int list_sensors(int fd);
 
 
 /**
@@ -34,8 +36,10 @@ int main(int argc, char *argv[]) {
     char *portarg = NULL;
     char *hostarg = NULL;
     uint16_t port = 0;
+    bool list = false;
 
-    while (-1 != (c = getopt(argc, argv, "a:p:h:"))) {
+
+    while (-1 != (c = getopt(argc, argv, "a:p:h:l"))) {
         switch(c) {
             case 'a': {
                 addarg = optarg;
@@ -48,6 +52,10 @@ int main(int argc, char *argv[]) {
             }
             case 'h': {
                 hostarg = optarg;
+                break;
+            }
+            case 'l':{
+                list = true;
                 break;
             }
             case '?': {
@@ -94,6 +102,10 @@ int main(int argc, char *argv[]) {
 
     if (NULL != addarg) {
         send_sensor(fd, addarg);
+    }
+
+    if (true == list) {
+        list_sensors(fd);
     }
 
     close(fd);
@@ -169,6 +181,13 @@ int send_req(int fd) {
     return 0;
 }
 
+
+/**
+  * @brief  Add a sensor to the database
+  * @param fd: File descriptor of the client.
+  * @param addstr: Sensor to be added.
+  * @retval STATUS_SUCCESS or STATUS_ERROR
+  */
 int send_sensor(int fd, const char *addstr) {
     char buff[BUFF_SIZE] = {0};
 
@@ -199,6 +218,76 @@ int send_sensor(int fd, const char *addstr) {
 
     if (MSG_SENSOR_ADD_RESP  == hdr->type) {
         printf("Sensor added succesfully.\r\n");
+    }
+
+    return STATUS_SUCCESS;
+}
+
+/**
+  * @brief  List sensors
+  * @param fd: File descriptor of the client.
+  * @retval STATUS_SUCCESS or STATUS_ERROR
+  */
+int list_sensors(int fd) {
+    char buf[4096] = {0};
+    DbProtocolHdr_t *hdr = (DbProtocolHdr_t *)buf;
+    hdr->type = MSG_SENSOR_LIST_REQ;
+    hdr->len = 0;
+
+    hdr->type = htonl(hdr->type);
+    hdr->len = htons(hdr->len);
+    write(fd, buf, sizeof(DbProtocolHdr_t));
+    printf("Sent sensor list request to server\n");
+
+    read(fd, hdr, sizeof(DbProtocolHdr_t));
+    hdr->type = ntohl(hdr->type);
+    hdr->len = ntohs(hdr->len);
+    
+    if (hdr->type == MSG_ERROR) {
+        printf("Unable to list sensors.\n");
+        close(fd);
+        return STATUS_ERROR;
+    } 
+
+    if (hdr->type == MSG_SENSOR_LIST_RESP) {
+        int count = hdr->len;
+        printf("Received sensor list response from server. Count: %d\n", count);
+
+        DbProtocol_SensorListResp_t *sensor = (DbProtocol_SensorListResp_t *)&hdr[1];
+        unsigned int temp;
+        int i = 0;
+        
+        for (; i < count; i++) {
+            read(fd, sensor, sizeof(DbProtocol_SensorListResp_t));
+            
+            sensor->timestamp = ntohl(sensor->timestamp);
+            
+            temp = ntohl(*(unsigned int*)&sensor->readingValue);
+            sensor->readingValue = *(float*)&temp;
+            
+            temp = ntohl(*(unsigned int*)&sensor->minThreshold);
+            sensor->minThreshold = *(float*)&temp;
+            
+            temp = ntohl(*(unsigned int*)&sensor->maxThreshold);
+            sensor->maxThreshold = *(float*)&temp;
+            
+            printf("\nSensor %d:\n", i);
+            printf("  ID: %s\n", sensor->sensorId);
+            printf("  Type: %s\n", sensor->sensorType);
+            printf("  I2C Address: 0x%02X\n", sensor->i2cAddr);
+            printf("  Timestamp: %s", ctime((time_t*)&sensor->timestamp));
+            printf("  Reading: %.2f\n", sensor->readingValue);
+            printf("  Flags: 0x%02X", sensor->flags);
+            
+            if (sensor->flags & 0x01) printf(" ACTIVE");
+            if (sensor->flags & 0x02) printf(" ERROR");
+            if (sensor->flags & 0x04) printf(" CALIBRATED");
+            
+            printf("\n");
+            printf("  Location: %s\n", sensor->location);
+            printf("  Thresholds: Min=%.2f, Max=%.2f\n", 
+                   sensor->minThreshold, sensor->maxThreshold);
+        }
     }
 
     return STATUS_SUCCESS;

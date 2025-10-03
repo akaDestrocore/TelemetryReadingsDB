@@ -21,6 +21,8 @@ static void fsm_reply_hello(ClientState_t *client, DbProtocolHdr_t *hdr);
 static void fsm_reply_err(ClientState_t *client, DbProtocolHdr_t *hdr);
 // Reply successfull add 
 static void fsm_reply_add(ClientState_t *client, DbProtocolHdr_t *hdr);
+// List all sensors in database
+static void fsm_reply_list(ClientState_t *client, Parse_DbHeader_t *dbhdr, Parse_Sensor_t **sensors);
 // Handle client's request
 static void handle_signal(int sig);
 // listen for incoming connections
@@ -229,7 +231,13 @@ static void handle_client_fsm(Parse_DbHeader_t *dbhdr, Parse_Sensor_t **ppSensor
                 parse_outputFile(dbfd, dbhdr, *ppSensors);
             }
         }
+
+        if (MSG_SENSOR_LIST_REQ == hdr->type) {
+            printf("Listing all sensors\r\n");
+            fsm_reply_list(client, dbhdr, ppSensors);
+        }
     }
+
 }
 
 static void fsm_reply_hello(ClientState_t *client, DbProtocolHdr_t *hdr) {
@@ -252,8 +260,41 @@ static void fsm_reply_add(ClientState_t *client, DbProtocolHdr_t *hdr) {
     write(client->fd, hdr, sizeof(DbProtocolHdr_t));
 }
 
+static void fsm_reply_list(ClientState_t *client, Parse_DbHeader_t *dbhdr, Parse_Sensor_t **sensors) {
+    DbProtocolHdr_t *hdr = (DbProtocolHdr_t*)client->buffer;
+    DbProtocol_SensorListResp_t *resp = (DbProtocol_SensorListResp_t *)&hdr[1];
+    unsigned int temp;
+    int i = 0;
+    
+    hdr->type = htonl(MSG_SENSOR_LIST_RESP);
+    hdr->len = htons(dbhdr->count);
+    write(client->fd, hdr, sizeof(DbProtocolHdr_t));
+
+    for (; i < dbhdr->count; i++) {
+        strncpy(resp->sensorId, (*sensors)[i].sensorId, sizeof(resp->sensorId));
+        strncpy(resp->sensorType, (*sensors)[i].sensorType, sizeof(resp->sensorType));
+        resp->i2cAddr = (*sensors)[i].i2cAddr;
+        resp->timestamp = htonl((*sensors)[i].timestamp);
+        
+        temp = htonl(*(unsigned int*)&(*sensors)[i].readingValue);
+        resp->readingValue = *(float*)&temp;
+        
+        resp->flags = (*sensors)[i].flags;
+        strncpy(resp->location, (*sensors)[i].location, sizeof(resp->location));
+        
+        temp = htonl(*(unsigned int*)&(*sensors)[i].minThreshold);
+        resp->minThreshold = *(float*)&temp;
+        
+        temp = htonl(*(unsigned int*)&(*sensors)[i].maxThreshold);
+        resp->maxThreshold = *(float*)&temp;
+        
+        write(client->fd, resp, sizeof(DbProtocol_SensorListResp_t));
+    }
+}
+
+
 static void handle_signal(int sig) {
-    printf("Received signal %d, shutting down...\n", sig);
+    printf("Received signal %d, shutting down...\r\n", sig);
     keep_running = false;
 }
 

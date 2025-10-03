@@ -59,6 +59,10 @@ int main(int argc, char *argv[]) {
                 }
                 break;
             }
+            case 'l':{
+                list = true;
+                break;
+            }
             case '?':{
                 printf("Unknown option -%c\r\n", c);
                 break;
