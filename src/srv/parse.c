@@ -30,7 +30,7 @@ int parse_createDbHeader(int fd, Parse_DbHeader_t **ppHeaderOut) {
  * @brief  Validates that the file is a valid database. 
  * @param fd: [in] File descriptor
  * @param  ppHeaderOut: [in] pointer to a pointer that will be set to the newly created header
- * @return 0 if success, -1 otherwise
+ * @return STATUS_SUCCESS or STATUS_ERROR
  */
 int parse_validateDbHeader(int fd, Parse_DbHeader_t **ppHeaderOut)
 {
@@ -92,18 +92,19 @@ int parse_validateDbHeader(int fd, Parse_DbHeader_t **ppHeaderOut)
 /**
  * @brief  Parse a sensor string and add it to the database
  * @param pDbhdr Pointer to the database header
- * @param pSensors Pointer to the sensors array
+ * @param ppSensors Pointer to pointer of sensors array
  * @param pAddString String containing the sensor data in the following format:
  *                  sensor_id,sensor_type,i2c_addr,timestamp,reading_value
- * @return 0 if success, -1 otherwise
+ * @return STATUS_SUCCESS or STATUS_ERROR
  */
-int parse_addSensor(Parse_DbHeader_t *pDbhdr, Parse_Sensor_t *pSensors, char *pAddString)
+int parse_addSensor(Parse_DbHeader_t *pDbhdr, Parse_Sensor_t **ppSensors, char *pAddString)
 {
     char *pSensorId = NULL;
     char *pSensorType = NULL;
     char *pI2cAddrStr = NULL;
     char *pTimestampStr = NULL;
     char *pReadingStr = NULL;
+    Parse_Sensor_t *pNewSensors = NULL;
 
     printf("%s\n", pAddString);
 
@@ -116,27 +117,51 @@ int parse_addSensor(Parse_DbHeader_t *pDbhdr, Parse_Sensor_t *pSensors, char *pA
     pTimestampStr = strtok(NULL, ",");
     pReadingStr = strtok(NULL, ",");
 
+    if (pSensorId == NULL || pSensorType == NULL || pI2cAddrStr == NULL ||
+        pTimestampStr == NULL || pReadingStr == NULL) {
+        printf("Invalid format for sensor data\r\n");
+        return STATUS_ERROR;
+    }
+
     printf("%s %s %s %s %s\n", pSensorId, pSensorType, pI2cAddrStr, 
             pTimestampStr, pReadingStr);
 
-    memset(&pSensors[pDbhdr->count - 1], 0, sizeof(Parse_Sensor_t));
+    // Increment count first
+    pDbhdr->count++;
 
-    strncpy(pSensors[pDbhdr->count - 1].sensorId, pSensorId, 
-            sizeof(pSensors[pDbhdr->count - 1].sensorId) - 1);
-    strncpy(pSensors[pDbhdr->count - 1].sensorType, pSensorType, 
-            sizeof(pSensors[pDbhdr->count - 1].sensorType) - 1);
+    // Reallocate the sensors array to fit the new sensor
+    pNewSensors = realloc(*ppSensors, pDbhdr->count * sizeof(Parse_Sensor_t));
+    if (NULL == pNewSensors && pDbhdr->count > 0)
+    {
+        printf("Realloc failed to expand sensors array\r\n");
+        pDbhdr->count--;
+        return STATUS_ERROR;
+    }
+
+    *ppSensors = pNewSensors;
+
+    // Initialize the new sensor entry
+    memset(&(*ppSensors)[pDbhdr->count - 1], 0, sizeof(Parse_Sensor_t));
+
+    strncpy((*ppSensors)[pDbhdr->count - 1].sensorId, pSensorId, 
+            sizeof((*ppSensors)[pDbhdr->count - 1].sensorId) - 1);
+    strncpy((*ppSensors)[pDbhdr->count - 1].sensorType, pSensorType, 
+            sizeof((*ppSensors)[pDbhdr->count - 1].sensorType) - 1);
 
     // Parse I2C address if any
-    pSensors[pDbhdr->count - 1].i2cAddr = (unsigned char)strtol(pI2cAddrStr, NULL, 0);
+    (*ppSensors)[pDbhdr->count - 1].i2cAddr = (unsigned char)strtol(pI2cAddrStr, NULL, 0);
 
-    pSensors[pDbhdr->count - 1].timestamp = (time_t)atol(pTimestampStr);
+    (*ppSensors)[pDbhdr->count - 1].timestamp = (time_t)atol(pTimestampStr);
 
-    pSensors[pDbhdr->count - 1].readingValue = atof(pReadingStr);
+    (*ppSensors)[pDbhdr->count - 1].readingValue = atof(pReadingStr);
 
-    pSensors[pDbhdr->count - 1].flags = SENSOR_FLAG_ACTIVE | SENSOR_FLAG_CALIBRATED;
-    strcpy(pSensors[pDbhdr->count - 1].location, "Unknown Location");
-    pSensors[pDbhdr->count - 1].minThreshold = -100.0;
-    pSensors[pDbhdr->count - 1].maxThreshold = 100.0;
+    (*ppSensors)[pDbhdr->count - 1].flags = SENSOR_FLAG_ACTIVE | SENSOR_FLAG_CALIBRATED;
+    strcpy((*ppSensors)[pDbhdr->count - 1].location, "Unknown Location");
+    (*ppSensors)[pDbhdr->count - 1].minThreshold = -100.0;
+    (*ppSensors)[pDbhdr->count - 1].maxThreshold = 100.0;
+
+    // Update filesize
+    pDbhdr->filesize = sizeof(Parse_DbHeader_t) + (sizeof(Parse_Sensor_t) * pDbhdr->count);
 
     return STATUS_SUCCESS;
 }
@@ -146,7 +171,7 @@ int parse_addSensor(Parse_DbHeader_t *pDbhdr, Parse_Sensor_t *pSensors, char *pA
  * @param pDbhdr: Pointer to the database header
  * @param pSensors: Pointer to the array of sensors
  * @param pRemove: Pointer to the string containing the sensor ID to be removed
- * @return 0 if success, -1 otherwise
+ * @return STATUS_SUCCESS or STATUS_ERROR
  */
 int parse_removeSensor(Parse_DbHeader_t *pDbhdr, Parse_Sensor_t *pSensors, char *pRemove)
 {
@@ -215,7 +240,7 @@ void parse_listSensors(Parse_DbHeader_t *pDbhdr, Parse_Sensor_t *pSensors)
  * @param fd: [in] File descriptor
  * @param  pDbhdr: [in] Pointer to database header
  * @param ppSensorsOut: [out] Pointer to array of sensors
- * @return 0 if success, -1 otherwise
+ * @return STATUS_SUCCESS or STATUS_ERROR
  */
 int parse_readSensors(int fd, Parse_DbHeader_t *pDbhdr, Parse_Sensor_t **ppSensorsOut)
 {
@@ -261,14 +286,15 @@ int parse_readSensors(int fd, Parse_DbHeader_t *pDbhdr, Parse_Sensor_t **ppSenso
 }
 
 
+
 /**
- * @brief Output new database file to disk
+ * @brief Output database to disk
  * @param fd: [in] File descriptor
  * @param  pDbhdr: [in] Pointer to database header
  * @param pSensors: [in] Pointer to sensor array
- * @return 0 if success, -1 otherwise
+ * @return STATUS_SUCCESS or STATUS_ERROR
  */
-void parse_outputFile(int fd, Parse_DbHeader_t *pDbhdr, Parse_Sensor_t *pSensors)
+int parse_outputFile(int fd, Parse_DbHeader_t *pDbhdr, Parse_Sensor_t *pSensors)
 {
     int realCount = 0;
     int i = 0;
@@ -278,20 +304,23 @@ void parse_outputFile(int fd, Parse_DbHeader_t *pDbhdr, Parse_Sensor_t *pSensors
     if (fd < 0)
     {
         printf("Got a bad FD from the user\r\n");
-        return;
+        return STATUS_ERROR;
     }
 
     realCount = pDbhdr->count;
 
+    // Convert header to network byte order
     pDbhdr->magic = htonl(pDbhdr->magic);
     pDbhdr->filesize = htonl(sizeof(Parse_DbHeader_t) + (sizeof(Parse_Sensor_t) * realCount));
     pDbhdr->count = htons(pDbhdr->count);
     pDbhdr->version = htons(pDbhdr->version);
 
+    // Position file pointer at beginning
     lseek(fd, 0, SEEK_SET);
 
     write(fd, pDbhdr, sizeof(Parse_DbHeader_t));
 
+    // Write each sensor
     for (i = 0; i < realCount; i++)
     {
         tempSensor = pSensors[i];
@@ -309,5 +338,14 @@ void parse_outputFile(int fd, Parse_DbHeader_t *pDbhdr, Parse_Sensor_t *pSensors
         write(fd, &tempSensor, sizeof(Parse_Sensor_t));
     }
 
+    // Truncate file to exact size
     ftruncate(fd, sizeof(Parse_DbHeader_t) + (sizeof(Parse_Sensor_t) * realCount));
+
+    // Convert header back to host byte order
+    pDbhdr->magic = ntohl(pDbhdr->magic);
+    pDbhdr->version = ntohs(pDbhdr->version);
+    pDbhdr->count = ntohs(pDbhdr->count);
+    pDbhdr->filesize = ntohl(pDbhdr->filesize);
+
+    return STATUS_SUCCESS;
 }

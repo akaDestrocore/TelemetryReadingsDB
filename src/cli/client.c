@@ -145,7 +145,7 @@ int send_req(int fd) {
 
     hdr->type = htonl(hdr->type);
     hdr->len = htons(hdr->len);
-    req->version = htonl(req->version);
+    req->version = htons(req->version);
 
     // Write data
     write(fd, buff, sizeof(DbProtocolHdr_t) + sizeof(DbProtocolVer_Req_t));
@@ -153,8 +153,8 @@ int send_req(int fd) {
     // Read response
     read(fd, buff, sizeof(buff));
 
-    hdr->type = htonl(hdr->type);
-    hdr->len = htons(hdr->len);
+    hdr->type = ntohl(hdr->type);
+    hdr->len = ntohs(hdr->len);
     
     // if any errors
     if ( MSG_ERROR == hdr->type) {
@@ -188,7 +188,7 @@ int send_sensor(int fd, const char *addstr) {
     // Read response 
     read(fd, buff, sizeof(buff));
 
-    hdr->type = htonl(hdr->type);
+    hdr->type = ntohl(hdr->type);
     hdr->len = ntohs(hdr->len);
 
     if (MSG_ERROR == hdr->type) {

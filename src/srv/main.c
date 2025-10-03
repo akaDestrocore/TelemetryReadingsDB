@@ -20,7 +20,7 @@ ClientState_t clientStates[MAX_CLIENTS];
 
 /* Private function prototypes -----------------------------------------------*/
 void printUsage(char *argv[]);
-void poll_loop(unsigned short port, Parse_DbHeader_t *dbhdr, Parse_Sensor_t **sensors, int dbfd);
+void poll_loop(unsigned short port, Parse_DbHeader_t *dbhdr, Parse_Sensor_t **ppSensors, int dbfd);
 
 /**
   * @brief  The application entry point.

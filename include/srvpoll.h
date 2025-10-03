@@ -25,6 +25,6 @@ typedef struct {
 } ClientState_t;
 
 // Polling routine for the server
-void poll_loop(unsigned short port, Parse_DbHeader_t *dbhdr, Parse_Sensor_t **sensors, int dbfd);
+void poll_loop(unsigned short port, Parse_DbHeader_t *dbhdr, Parse_Sensor_t **ppSensors, int dbfd);
 
 #endif /* _SRVPOLL_H */

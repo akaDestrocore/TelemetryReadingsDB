@@ -72,12 +72,12 @@ static int srvpoll_findSlotByFd(ClientState_t* states, int fd) {
   * @param sensors: pointer to the array of sensor structures
   * @param dbfd: file descriptor for the database file
   */
-void poll_loop(unsigned short port, Parse_DbHeader_t *dbhdr, Parse_Sensor_t **sensors, int dbfd) {
+void poll_loop(unsigned short port, Parse_DbHeader_t *dbhdr, Parse_Sensor_t **ppSensors, int dbfd) {
     int listen_fd, conn_fd, freeSlot;
     struct sockaddr_in server_addr, client_addr;
     socklen_t client_len = sizeof(client_addr);
 
-    struct pollfd fds[MAX_CLIENTS];
+    struct pollfd fds[MAX_CLIENTS+1];
     int nfds = 1;
     int opt = 1;
 
@@ -203,18 +203,21 @@ static void handle_client_fsm(Parse_DbHeader_t *dbhdr, Parse_Sensor_t **ppSensor
         // Hello message received, check for the length of the message.
         if (MSG_HANDSHAKE_REQ != hdr->type || 1 != hdr->len) {
             printf("Didn't receive MSG_HELLO from client.\r\n");
+            fsm_reply_err(client, hdr);
+            return;
         }
 
         DbProtocolVer_Req_t* hello_protocol = (DbProtocolVer_Req_t*)&hdr[1];
         hello_protocol->version = ntohs(hello_protocol->version);
         if (PROTOCOL_VER != hello_protocol->version) {
             printf("Protocol mismatch.\r\n");
+            fsm_reply_err(client, hdr);
+            return;
         }
 
         fsm_reply_hello(client, hdr);
         client->state = STATE_MSG;
         printf("Client promoted to STATE_MSG\r\n");
-        return;
     }
 
     if (STATE_MSG == client->state) {
