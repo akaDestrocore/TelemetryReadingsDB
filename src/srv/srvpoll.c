@@ -69,7 +69,7 @@ static int find_slot_by_fd(ClientState_t *states, int fd) {
             return i;
         }
     }
-    
+
     return -1;
 }
 
@@ -193,7 +193,7 @@ static void handle_client_fsm(Parse_DbHeader_t *dbhdr, Parse_Sensor_t **ppSensor
 
     // Unpack
     hdr->type = ntohl(hdr->type);
-    hdr->len = ntohl(hdr->len);
+    hdr->len = ntohs(hdr->len);
 
     if (STATE_HELLO == client->state) {
         // Hello message received, check for the length of the message.

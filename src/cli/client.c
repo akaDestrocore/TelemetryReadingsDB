@@ -12,9 +12,9 @@
 #define BUFF_SIZE   4096
 
 /* Private function prototypes -----------------------------------------------*/
-void handleClient(int fd);
-int send_req(int fd);
-int send_sensor(int fd, const char *addstr);
+static void handle_client(int fd);
+static int send_req(int fd);
+static int send_sensor(int fd, const char *addstr);
 
 
 /**
@@ -105,7 +105,7 @@ int main(int argc, char *argv[]) {
   * @brief  Handle a client connection.
   * @param fd: Client file descriptor.
   */
-void handleClient(int fd) {
+void handle_client(int fd) {
     char buff[4096] = {0};
 
     read(fd, buff, sizeof(DbProtocolHdr_t) + sizeof(int));
