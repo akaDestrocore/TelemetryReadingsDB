@@ -16,7 +16,8 @@
 static void handle_client(int fd);
 static int send_req(int fd);
 static int send_sensor(int fd, const char *addstr);
-int list_sensors(int fd);
+static int list_sensors(int fd);
+static int delete_sensor(int fd, char *sensorId);
 
 
 /**
@@ -35,11 +36,12 @@ int main(int argc, char *argv[]) {
     char *addarg = NULL;
     char *portarg = NULL;
     char *hostarg = NULL;
+    char *deletearg = NULL;
     uint16_t port = 0;
     bool list = false;
 
 
-    while (-1 != (c = getopt(argc, argv, "a:p:h:l"))) {
+    while (-1 != (c = getopt(argc, argv, "a:p:h:ld:"))) {
         switch(c) {
             case 'a': {
                 addarg = optarg;
@@ -56,6 +58,10 @@ int main(int argc, char *argv[]) {
             }
             case 'l':{
                 list = true;
+                break;
+            }
+            case 'd':{
+                deletearg = optarg;
                 break;
             }
             case '?': {
@@ -106,6 +112,10 @@ int main(int argc, char *argv[]) {
 
     if (true == list) {
         list_sensors(fd);
+    }
+
+    if (NULL != deletearg) {
+        delete_sensor(fd, deletearg);
     }
 
     close(fd);
@@ -228,7 +238,7 @@ int send_sensor(int fd, const char *addstr) {
   * @param fd: File descriptor of the client.
   * @retval STATUS_SUCCESS or STATUS_ERROR
   */
-int list_sensors(int fd) {
+static int list_sensors(int fd) {
     char buf[4096] = {0};
     DbProtocolHdr_t *hdr = (DbProtocolHdr_t *)buf;
     hdr->type = MSG_SENSOR_LIST_REQ;
@@ -271,24 +281,64 @@ int list_sensors(int fd) {
             temp = ntohl(*(unsigned int*)&sensor->maxThreshold);
             sensor->maxThreshold = *(float*)&temp;
             
-            printf("\nSensor %d:\n", i);
-            printf("  ID: %s\n", sensor->sensorId);
-            printf("  Type: %s\n", sensor->sensorType);
+            printf("\nSensor %d:\r\n", i);
+            printf("  ID: %s\r\n", sensor->sensorId);
+            printf("  Type: %s\r\n", sensor->sensorType);
             printf("  I2C Address: 0x%02X\n", sensor->i2cAddr);
             printf("  Timestamp: %s", ctime((time_t*)&sensor->timestamp));
-            printf("  Reading: %.2f\n", sensor->readingValue);
+            printf("  Reading: %.2f\r\n", sensor->readingValue);
             printf("  Flags: 0x%02X", sensor->flags);
             
             if (sensor->flags & 0x01) printf(" ACTIVE");
             if (sensor->flags & 0x02) printf(" ERROR");
             if (sensor->flags & 0x04) printf(" CALIBRATED");
             
-            printf("\n");
-            printf("  Location: %s\n", sensor->location);
-            printf("  Thresholds: Min=%.2f, Max=%.2f\n", 
+            printf("\r\n");
+            printf("  Location: %s\r\n", sensor->location);
+            printf("  Thresholds: Min=%.2f, Max=%.2f\r\n", 
                    sensor->minThreshold, sensor->maxThreshold);
         }
     }
 
+    return STATUS_SUCCESS;
+}
+
+/**
+  * @brief  Delete a sensor from the database.
+  * @param fd: File descriptor of the client.
+  * @param sensorId: ID of the sensor to be deleted
+  * @retval STATUS_SUCCESS or STATUS_ERROR
+  */
+int delete_sensor(int fd, char *sensorId) {
+    char buf[4096] = {0};
+
+    DbProtocolHdr_t *hdr = (DbProtocolHdr_t *)buf;
+    hdr->type = MSG_SENSOR_DEL_REQ;
+    hdr->len = 1;
+
+    DbProtocol_SensorDeleteReq_t *sensor = (DbProtocol_SensorDeleteReq_t *)&hdr[1];
+    strncpy((char *)sensor->sensorId, sensorId, sizeof(sensor->sensorId) - 1);
+    sensor->sensorId[sizeof(sensor->sensorId) - 1] = '\0';
+
+    hdr->type = htonl(hdr->type);
+    hdr->len = htons(hdr->len);
+
+    write(fd, buf, sizeof(DbProtocolHdr_t) + sizeof(DbProtocol_SensorDeleteReq_t));
+    printf("Sent delete request to server. Sensor ID: %s\r\n", sensorId);
+    read(fd, buf, sizeof(buf));
+
+    hdr->type = ntohl(hdr->type);
+    hdr->len = ntohs(hdr->len);
+
+    if (hdr->type == MSG_ERROR) {
+        printf("Unable to delete sensor '%s' - sensor not found\r\n", sensorId);
+        return STATUS_ERROR;
+    }
+
+    if (hdr->type != MSG_SENSOR_DEL_RESP) {
+        fprintf(stderr, "Unexpected response type: %d\r\n", hdr->type);
+        return STATUS_ERROR;
+    }
+    printf("Successfully deleted sensor '%s' from database\r\n", sensorId);
     return STATUS_SUCCESS;
 }

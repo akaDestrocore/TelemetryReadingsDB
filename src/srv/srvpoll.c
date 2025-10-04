@@ -23,6 +23,8 @@ static void fsm_reply_err(ClientState_t *client, DbProtocolHdr_t *hdr);
 static void fsm_reply_add(ClientState_t *client, DbProtocolHdr_t *hdr);
 // List all sensors in database
 static void fsm_reply_list(ClientState_t *client, Parse_DbHeader_t *dbhdr, Parse_Sensor_t **sensors);
+// Delete a selected sensor from the database
+static void fsm_reply_delete(ClientState_t *client, DbProtocolHdr_t *hdr);
 // Handle client's request
 static void handle_signal(int sig);
 // listen for incoming connections
@@ -231,10 +233,22 @@ static void handle_client_fsm(Parse_DbHeader_t *dbhdr, Parse_Sensor_t **ppSensor
                 parse_outputFile(dbfd, dbhdr, *ppSensors);
             }
         }
-
+        
         if (MSG_SENSOR_LIST_REQ == hdr->type) {
             printf("Listing all sensors\r\n");
             fsm_reply_list(client, dbhdr, ppSensors);
+        }
+
+        if (MSG_SENSOR_DEL_REQ == hdr->type) {
+            DbProtocol_SensorDeleteReq_t *sensor = (DbProtocol_SensorDeleteReq_t *)&hdr[1];
+            printf("Deleting sensor: %s\n", sensor->sensorId);
+            if (STATUS_SUCCESS != parse_removeSensor(dbhdr, ppSensors, (char *)sensor->sensorId)) {
+                fsm_reply_err(client, hdr);
+                return;
+            } else {
+                fsm_reply_delete(client, hdr);
+                parse_outputFile(dbfd, dbhdr, *ppSensors);
+            }
         }
     }
 
@@ -246,18 +260,24 @@ static void fsm_reply_hello(ClientState_t *client, DbProtocolHdr_t *hdr) {
     DbProtocolVer_Resp_t* hello_protocol = (DbProtocolVer_Resp_t*)&hdr[1];
     hello_protocol->version = htons(PROTOCOL_VER);
     write(client->fd, hdr, sizeof(DbProtocolHdr_t) + sizeof(DbProtocolVer_Resp_t));
+
+    return;
 }
 
 static void fsm_reply_err(ClientState_t *client, DbProtocolHdr_t *hdr) {
     hdr->type = htonl(MSG_ERROR);
     hdr->len = htons(0);
     write(client->fd, hdr, sizeof(DbProtocolHdr_t));
+
+    return;
 }
 
 static void fsm_reply_add(ClientState_t *client, DbProtocolHdr_t *hdr) {
     hdr->type = htonl(MSG_SENSOR_ADD_RESP);
     hdr->len = htons(0);
     write(client->fd, hdr, sizeof(DbProtocolHdr_t));
+
+    return;
 }
 
 static void fsm_reply_list(ClientState_t *client, Parse_DbHeader_t *dbhdr, Parse_Sensor_t **sensors) {
@@ -290,12 +310,23 @@ static void fsm_reply_list(ClientState_t *client, Parse_DbHeader_t *dbhdr, Parse
         
         write(client->fd, resp, sizeof(DbProtocol_SensorListResp_t));
     }
+
+    return;
 }
 
+static void fsm_reply_delete(ClientState_t *client, DbProtocolHdr_t *hdr) {
+    hdr->type = htonl(MSG_SENSOR_DEL_RESP);
+    hdr->len = htons(0);
+    write(client->fd, hdr, sizeof(DbProtocolHdr_t));
+
+    return;
+}
 
 static void handle_signal(int sig) {
     printf("Received signal %d, shutting down...\r\n", sig);
     keep_running = false;
+
+    return;
 }
 
 static int setup_server_socket(unsigned short port) {

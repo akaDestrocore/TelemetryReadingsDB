@@ -167,39 +167,64 @@ int parse_addSensor(Parse_DbHeader_t *pDbhdr, Parse_Sensor_t **ppSensors, char *
 }
 
 /**
- * @brief Parse a new sensor from the file
+ * @brief Remove a sensor from the database
  * @param pDbhdr: Pointer to the database header
- * @param pSensors: Pointer to the array of sensors
+ * @param ppSensors: Pointer to pointer of sensors array (for reallocation)
  * @param pRemove: Pointer to the string containing the sensor ID to be removed
  * @return STATUS_SUCCESS or STATUS_ERROR
  */
-int parse_removeSensor(Parse_DbHeader_t *pDbhdr, Parse_Sensor_t *pSensors, char *pRemove)
-{
+int parse_removeSensor(Parse_DbHeader_t *pDbhdr, Parse_Sensor_t **ppSensors, char *pRemove) {
     int sensorIndex = -1;
-    int i = 0;
+    Parse_Sensor_t *pNewSensors = NULL;
 
-    for (i = 0; i < pDbhdr->count; i++)
+    sensorIndex = parse_findSensor(pDbhdr, *ppSensors, pRemove);
+
+    if (-1 == sensorIndex)
     {
-        if (0 == strcmp(pRemove, pSensors[i].sensorId))
-        {
-            printf("index of sensor %d", i);
-            sensorIndex = i;
-            break;
-        }
+        printf("Sensor '%s' not found\n", pRemove);
+        return STATUS_ERROR;
     }
 
-    if (-1 != sensorIndex)
-    {
-        for (i = sensorIndex; i < pDbhdr->count - 1; i++)
-        {
-            pSensors[i] = pSensors[i + 1];
-        }
+    printf("Removing sensor at index %d\n", sensorIndex);
 
-        return STATUS_SUCCESS;
+    // Determine how many sensors need to be moved
+    int sensors_to_move = pDbhdr->count - sensorIndex - 1;
+
+    // Shift all subsequent sensors up one position
+    if (sensors_to_move > 0)
+    {
+        memmove(&(*ppSensors)[sensorIndex], &(*ppSensors)[sensorIndex + 1],
+                sensors_to_move * sizeof(Parse_Sensor_t));
     }
 
-    return STATUS_ERROR;
+    pDbhdr->count--;
+
+    // Reallocate the array to the new smaller size
+    if (pDbhdr->count > 0)
+    {
+        pNewSensors = realloc(*ppSensors, pDbhdr->count * sizeof(Parse_Sensor_t));
+        if (NULL == pNewSensors)
+        {
+            // Revert count decrement
+            pDbhdr->count++;
+            printf("Failed to resize sensors array\n");
+            return STATUS_ERROR;
+        }
+        *ppSensors = pNewSensors;
+    }
+    else
+    {
+        // If count is 0, free the array
+        free(*ppSensors);
+        *ppSensors = NULL;
+    }
+
+    // Update filesize
+    pDbhdr->filesize = sizeof(Parse_DbHeader_t) + (sizeof(Parse_Sensor_t) * pDbhdr->count);
+
+    return STATUS_SUCCESS;
 }
+
 
 void parse_listSensors(Parse_DbHeader_t *pDbhdr, Parse_Sensor_t *pSensors)
 {
@@ -285,7 +310,26 @@ int parse_readSensors(int fd, Parse_DbHeader_t *pDbhdr, Parse_Sensor_t **ppSenso
     return STATUS_SUCCESS;
 }
 
+/**
+ * @brief Find a sensor by ID
+ * @param pDbhdr: Pointer to the database header
+ * @param pSensors: Pointer to the array of sensors
+ * @param pSensorId: Sensor ID to search for
+ * @return Index of sensor if found, -1 otherwise
+ */
+int parse_findSensor(Parse_DbHeader_t *pDbhdr, Parse_Sensor_t *pSensors, const char *pSensorId) {
+    int i = 0;
 
+    for (i = 0; i < pDbhdr->count; i++)
+    {
+        if (0 == strcmp(pSensorId, pSensors[i].sensorId))
+        {
+            return i;
+        }
+    }
+
+    return -1;
+}
 
 /**
  * @brief Output database to disk

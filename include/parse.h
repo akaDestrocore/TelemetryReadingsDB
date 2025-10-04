@@ -48,7 +48,7 @@ int parse_validateDbHeader(int fd, Parse_DbHeader_t **ppHeaderOut);
 // add new sensor to database
 int parse_addSensor(Parse_DbHeader_t *pDbhdr, Parse_Sensor_t **ppSensors, char *pAddString);
 // remove sensor data from database
-int parse_removeSensor(Parse_DbHeader_t *pDbhdr, Parse_Sensor_t *pSensors, char *pRemove);
+int parse_removeSensor(Parse_DbHeader_t *pDbhdr, Parse_Sensor_t **ppSensors, char *pRemove);
 // list sensor records in database
 void parse_listSensors(Parse_DbHeader_t *pDbhdr, Parse_Sensor_t *pSensors);
 // read sensors in database

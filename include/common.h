@@ -53,4 +53,8 @@ typedef struct {
     float maxThreshold;
 } DbProtocol_SensorListResp_t;
 
+typedef struct {
+    char sensorId[64];
+} DbProtocol_SensorDeleteReq_t;
+
 #endif /* _COMMON_H */
