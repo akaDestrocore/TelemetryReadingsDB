@@ -13,6 +13,7 @@
 #define BUFF_SIZE   4096
 
 /* Private function prototypes -----------------------------------------------*/
+static void printUsage(char *argv[]);
 static void handle_client(int fd);
 static int send_req(int fd);
 static int send_sensor(int fd, const char *addstr);
@@ -28,7 +29,7 @@ static int delete_sensor(int fd, char *sensorId);
   */
 int main(int argc, char *argv[]) {
     if (argc < 2){
-        printf("Usage: %s <host ip>\r\n", argv[0]);
+        printUsage(argv);
         return 0;
     }
     
@@ -341,4 +342,20 @@ int delete_sensor(int fd, char *sensorId) {
     }
     printf("Successfully deleted sensor '%s' from database\r\n", sensorId);
     return STATUS_SUCCESS;
+}
+
+/**
+  * @brief  Print usage information for the application
+  * @param argv: [in] Array of pointers to the command-line argument strings
+  */
+static void printUsage(char *argv[]) {
+    
+    printf("\r\nUsage: %s -f -n <database file>\r\n", argv[0]);
+    printf("\t -h \t\t- (required) host to connect to\r\n");
+    printf("\t -p \t\t- (required) port to connect to\r\n");
+    printf("\t -a \t\t- add new sensor data with the given string format 'sensor_id,sensor_type,i2c_addr(if any),timestamp,reading_value'\r\n");
+    printf("\t -l \t\t- list all sensor etries in the database\r\n");
+    printf("\t -d <name> \t- delete sensor entry from the database with the given ID\r\n");
+
+    return;
 }

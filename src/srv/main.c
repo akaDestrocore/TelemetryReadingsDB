@@ -130,6 +130,7 @@ void printUsage(char *argv[]) {
     printf("\r\nUsage: %s -f -n <database file>\r\n", argv[0]);
     printf("\t -n - create new database file\r\n");
     printf("\t -f - (required) path to database file\r\n");
+    printf("\t -p - (required) port to listen on\r\n");
 
     return;
 }
